@@ -100,4 +100,7 @@ def register(root: str, steam_edit: bool = True, log=print) -> bool:
     steam.set_compat_tool(root, sc.appid, tool)
     save_config({'battlenet_exe': bnet, 'compat_data': compat, 'wow_dir': wow, 'proton': tool, 'appid': sc.appid})
     log(f'  selected Proton: {tool}; prefix: {compat}; WoW: {wow}')
+    # Keep Steam available even if the checklist has nothing else to install.
+    if not steam.steam_running():
+        steam.steam_launch()
     return True
