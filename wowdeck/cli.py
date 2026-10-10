@@ -232,8 +232,12 @@ def setup(args) -> int:
             ui.error('The passwords did not match; try again.')
     env = steam.session_env()
     if subprocess.run(['systemctl', '--user', 'is-active', 'wow-deck-finish.service'], capture_output=True, env=env).returncode == 0:
-        ui.info('WoW Deck is still finishing a previous setup in the background (waiting for World of Warcraft to be installed).\n\n'
-                'Switch to Game Mode, open Battle.net from your library and install WoW; the rest completes on its own.'); return 0
+        if ui.yesno('A previous setup is still waiting for WoW to be installed in the background. Stop that wait and continue setup so you can select an existing installation?'):
+            subprocess.run(['systemctl', '--user', 'stop', 'wow-deck-finish.service'], capture_output=True, env=env)
+            log('Stopped the previous background finisher; continuing setup.')
+        else:
+            ui.info('WoW Deck is still finishing a previous setup in the background. Switch to Game Mode, open Battle.net from your library and install WoW; the rest completes on its own.')
+            return 0
     deck.ensure_virtual_keyboard(log)
     # If WoW Deck cannot detect an installation, let the user import one instead of entering
     # the fresh Battle.net installer / background "waiting for WoW" path.
