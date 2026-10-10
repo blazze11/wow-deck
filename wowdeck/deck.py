@@ -86,6 +86,36 @@ def proton_versions(root: str) -> dict[str, str]:
     return out
 
 
+def available_proton_tools(root: str) -> dict[str, tuple[str, str]]:
+    """Installed selectable Proton tools: mapping name -> (display version, install directory).
+    Includes GE-Proton and other custom tools in compatibilitytools.d."""
+    out: dict[str, tuple[str, str]] = {}
+    candidates = glob.glob(os.path.join(root, 'steamapps', 'common', 'Proton*'))
+    candidates += glob.glob(os.path.join(root, 'compatibilitytools.d', '*'))
+    for d in sorted(set(candidates)):
+        if not os.path.isfile(os.path.join(d, 'proton')):
+            continue
+        base = os.path.basename(d)
+        mapping = {'Proton - Experimental': 'proton_experimental',
+                   'Proton 9.0 (Beta)': 'proton_9', 'Proton 10.0': 'proton_10',
+                   'Proton 11.0': 'proton_11', 'Proton Hotfix': 'proton_hotfix'}.get(base, base)
+        try:
+            version = open(os.path.join(d, 'version'), encoding='utf-8').read().strip()
+        except OSError:
+            version = base
+        out[mapping] = (version, d)
+    return out
+
+
+def wow_wtf_dirs_for_install(wow_dir: str) -> list[str]:
+    """Return WTF paths for installed flavours under an explicitly selected WoW directory."""
+    out = []
+    for d in sorted(glob.glob(os.path.join(os.path.abspath(os.path.expanduser(wow_dir)), '_*_'))):
+        if any(os.path.isfile(os.path.join(d, n)) for n in ('Wow.exe', 'WoW.exe', 'WowClassic.exe', 'WowT.exe', 'WowB.exe')):
+            out.append(os.path.join(d, 'WTF'))
+    return out
+
+
 def compat_tool_dir(root: str, tool_name: str) -> str | None:
     """Map a CompatToolMapping name (proton_experimental, proton_10, ...) to its install dir."""
     names = {'proton_experimental': 'Proton - Experimental', 'proton_9': 'Proton 9.0 (Beta)',

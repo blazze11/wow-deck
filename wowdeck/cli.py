@@ -62,7 +62,9 @@ def doctor(args) -> int:
         bad = tver in deck.PROTON_BAD
         _p(FAIL if bad else (OK if tool else WARN), f'  Proton: {tool or "(default)"}' + (f' = {tver}' if tver else '') + (' (broken hidraw env in this build; pick 10.0-3+ or Experimental)' if bad else ''))
         blockers += bad
-    wtfs = deck.wow_wtf_dirs(root)
+    # Include explicitly imported installs outside Steam's default compatdata tree.
+    ctx_for_wow = components.make_ctx()
+    wtfs = ctx_for_wow.wtf_dirs if ctx_for_wow else deck.wow_wtf_dirs(root)
     _p(OK if wtfs else WARN, f'WoW installs: {len(wtfs)}')
     for d in wtfs:
         _p(OK if os.path.isfile(os.path.join(d, files.WOW_JSON)) else WARN, f'  {files.WOW_JSON} in {d.split("compatdata/")[-1]}')
@@ -232,15 +234,51 @@ def setup(args) -> int:
             ui.error('The passwords did not match; try again.')
     env = steam.session_env()
     if subprocess.run(['systemctl', '--user', 'is-active', 'wow-deck-finish.service'], capture_output=True, env=env).returncode == 0:
-        ui.info('WoW Deck is still finishing a previous setup in the background (waiting for World of Warcraft to be installed).\n\n'
-                'Switch to Game Mode, open Battle.net from your library and install WoW; the rest completes on its own.'); return 0
+        if ui.yesno('A previous setup is still waiting for WoW to be installed in the background. Stop that wait and continue setup so you can select an existing installation?'):
+            subprocess.run(['systemctl', '--user', 'stop', 'wow-deck-finish.service'], capture_output=True, env=env)
+            log('Stopped the previous background finisher; continuing setup.')
+        else:
+            ui.info('WoW Deck is still finishing a previous setup in the background. Switch to Game Mode, open Battle.net from your library and install WoW; the rest completes on its own.')
+            return 0
     deck.ensure_virtual_keyboard(log)
+    # If WoW Deck cannot detect an installation, let the user import one instead of entering
+    # the fresh Battle.net installer / background "waiting for WoW" path.
+    initial_state = {c.id: c.detect(ctx) for c in components.COMPONENTS}
+    if not initial_state.get('battlenet', False):
+        mode = ui.menu('Choose how to set up WoW Deck', [
+            ('fresh', 'Install Battle.net into a new WoW Deck prefix'),
+            ('existing', 'Use an existing Battle.net + WoW installation'),
+        ])
+        if mode is None:
+            return 1
+        if mode == 'existing':
+            from . import existing
+            if not existing.register(ctx.root, steam_edit=not args.no_steam_edit, log=log):
+                return 1
+            ctx = components.make_ctx(log, steam_edit=not args.no_steam_edit)
+            if ctx is None:
+                ui.error('Steam was not found after importing the installation.'); return 1
     state = {c.id: c.detect(ctx) for c in components.COMPONENTS}
     items = [(c.id, c.title + ('   [installed]' if state[c.id] else ''), state[c.id] or c.default, c.required) for c in components.COMPONENTS]
     chosen = ui.checklist(ui.header('Set up World of Warcraft', 'Installed items are ticked; untick one to remove it.'), items)
     if chosen is None:
         print('cancelled'); return 1
     to_install = [c for c in components.COMPONENTS if c.id in chosen and not state[c.id]]
+    # Make Proton selection available on every setup run. "Keep current" is a no-op.
+    proton_choice = None
+    if 'battlenet' in chosen:
+        tools = deck.available_proton_tools(ctx.root)
+        if tools:
+            current = next((steam.get_compat_tool(ctx.root, sc.appid) for sc in ctx.shortcuts
+                            if 'battle.net' in (sc.name + sc.exe).lower()), None)
+            options = [('__keep__', 'Keep current Proton')]
+            options += [(name, f'{version} ({name})' + ('  [current]' if name == current else ''))
+                        for name, (version, _path) in sorted(tools.items(), key=lambda x: (x[0] != current, x[0].lower()))]
+            proton_choice = ui.menu('Choose Proton for Battle.net / WoW', options)
+            if proton_choice is None:
+                return 1
+            if proton_choice != '__keep__':
+                os.environ['WOW_DECK_PROTON'] = proton_choice
     to_remove = [c for c in components.COMPONENTS if c.id not in chosen and state[c.id] and not c.required]
     if to_remove and not ui.yesno('Remove: ' + ', '.join(c.title for c in to_remove) + '?'):
         to_remove = []
@@ -265,6 +303,11 @@ def setup(args) -> int:
         if ctx.steam_closed_by_us or not steam.steam_running():
             steam.steam_launch()
         ui.error('Setup stopped:\n\n' + '\n'.join(failures)); return 1
+    # Apply the selected tool even when the Battle.net shortcut already existed.
+    if proton_choice and proton_choice != '__keep__':
+        for sc in deck.find_battlenet_shortcuts(ctx.root):
+            steam.set_compat_tool(ctx.root, sc.appid, proton_choice)
+            log(f'  Proton for "{sc.name}" -> {proton_choice}')
     rest = [c for c in to_install if not c.required]
     # 3. WoW not installed yet: hand off to the background finisher and switch to Game Mode
     if rest and not components.wow_installed(ctx):

@@ -131,6 +131,32 @@ def menu(prompt: str, items: list[tuple[str, str]]) -> str | None:
     return items[int(ans) - 1][0] if ans.isdigit() and 0 < int(ans) <= len(items) else None
 
 
+def choose_file(prompt: str, start: str = '') -> str | None:
+    """Choose a file using the desktop file picker, with a typed-path fallback."""
+    b = backend()
+    if b == 'kdialog':
+        r = _run(['kdialog', '--title', TITLE, '--getopenfilename', start or os.path.expanduser('~'), '*', prompt])
+        return r.stdout.strip() or None if r.returncode == 0 else None
+    if b == 'zenity':
+        r = _run(['zenity', '--file-selection', '--title', prompt, '--filename=' + (start or os.path.expanduser('~') + '/')])
+        return r.stdout.strip() or None if r.returncode == 0 else None
+    value = input(f'{prompt} (absolute path, blank to cancel): ').strip()
+    return os.path.abspath(os.path.expanduser(value)) if value else None
+
+
+def choose_directory(prompt: str, start: str = '') -> str | None:
+    """Choose a directory using the desktop file picker, with a typed-path fallback."""
+    b = backend()
+    if b == 'kdialog':
+        r = _run(['kdialog', '--title', TITLE, '--getexistingdirectory', start or os.path.expanduser('~'), prompt])
+        return r.stdout.strip() or None if r.returncode == 0 else None
+    if b == 'zenity':
+        r = _run(['zenity', '--file-selection', '--directory', '--title', prompt, '--filename=' + (start or os.path.expanduser('~') + '/')])
+        return r.stdout.strip() or None if r.returncode == 0 else None
+    value = input(f'{prompt} (absolute path, blank to cancel): ').strip()
+    return os.path.abspath(os.path.expanduser(value)) if value else None
+
+
 def password(prompt: str) -> str | None:
     b = backend()
     if b == 'kdialog':

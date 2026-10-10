@@ -15,6 +15,8 @@ class Ctx:
     log: Callable = print
     steam_edit: bool = True     # allowed to close/relaunch Steam for config writes
     steam_closed_by_us: bool = False
+    existing_compat_data: str | None = None
+    existing_wow_dir: str | None = None
 
     def ensure_steam_closed(self) -> bool:
         if not steam.steam_running():
@@ -45,7 +47,7 @@ def _bn_detect(ctx: Ctx) -> bool:
 
 
 def wow_installed(ctx: Ctx) -> bool:
-    return bool(deck.wow_wtf_dirs(ctx.root))
+    return bool(ctx.wtf_dirs)
 
 
 def _bn_install(ctx: Ctx) -> None:
@@ -149,13 +151,15 @@ def _paddles_install(ctx: Ctx) -> None:
         need = files.WRAPPER not in sc.launch_options or (STEAM_INPUT_OFF and steam.get_steam_input(sc) != '0')
         if not need:
             ctx.log(f'  ok      Steam shortcut "{sc.name}" already configured'); continue
+        prefix = (f'STEAM_COMPAT_DATA_PATH="{ctx.existing_compat_data}" ' if ctx.existing_compat_data else '')
+        launch_options = prefix + files.LAUNCH_OPTIONS
         if ctx.ensure_steam_closed():
-            steam.set_launch_options(sc, files.LAUNCH_OPTIONS); sc.launch_options = files.LAUNCH_OPTIONS   # keep ctx current for detect()
+            steam.set_launch_options(sc, launch_options); sc.launch_options = launch_options   # keep ctx current for detect()
             if STEAM_INPUT_OFF:
                 steam.set_steam_input(sc, '0')
             ctx.log(f'  configured Steam shortcut "{sc.name}" (launch options' + (', Steam Input off)' if STEAM_INPUT_OFF else '; Steam Input left enabled)'))
         else:
-            ctx.log(f'  MANUAL  "{sc.name}": launch options -> {files.LAUNCH_OPTIONS}' + ('; Controller -> Disable Steam Input' if STEAM_INPUT_OFF else ''))
+            ctx.log(f'  MANUAL  "{sc.name}": launch options -> {launch_options}' + ('; Controller -> Disable Steam Input' if STEAM_INPUT_OFF else ''))
     _ensure_steam_ignores_edge(ctx)
 
 
@@ -219,4 +223,15 @@ def make_ctx(log=print, steam_edit=True) -> Ctx | None:
     root = steam.steam_root()
     if not root:
         return None
-    return Ctx(root, deck.wow_wtf_dirs(root), deck.find_battlenet_shortcuts(root), log, steam_edit)
+    # An explicitly imported installation can live outside Steam's default compatdata/library.
+    # Keep its WoW paths in the normal component pipeline so addons/config/CurseForge work there.
+    try:
+        import json
+        cfg = json.load(open(os.path.join(files.USER_DATA, 'existing-install.json'), encoding='utf-8'))
+    except (OSError, ValueError):
+        cfg = {}
+    wow_dir = cfg.get('wow_dir')
+    custom_wtf = deck.wow_wtf_dirs_for_install(wow_dir) if isinstance(wow_dir, str) and wow_dir else []
+    wtf_dirs = custom_wtf or deck.wow_wtf_dirs(root)
+    return Ctx(root, wtf_dirs, deck.find_battlenet_shortcuts(root), log, steam_edit,
+               existing_compat_data=cfg.get('compat_data'), existing_wow_dir=wow_dir if custom_wtf else None)
