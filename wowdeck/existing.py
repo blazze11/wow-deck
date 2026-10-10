@@ -34,21 +34,24 @@ def select_proton(root: str, current: str | None = None) -> str | None:
 
 def register(root: str, steam_edit: bool = True, log=print) -> bool:
     """Ask for existing paths and create/reuse a Steam shortcut. Returns False on cancel."""
-    bnet = ui.choose_file('Select the existing Battle.net.exe')
+    ui.info('Step 1 of 4 — Select the installed Battle.net executable.\n\nChoose Battle.net.exe inside the existing prefix, not Battle.net-Setup.exe or another installer. If Battle.net is installed in the prefix you will select next, it is usually under drive_c/Program Files (x86)/Battle.net/.')
+    bnet = ui.choose_file('Select installed Battle.net.exe (not the installer)')
     if not bnet:
         return False
     bnet = os.path.abspath(os.path.expanduser(bnet))
     if os.path.basename(bnet).lower() != 'battle.net.exe' or not os.path.isfile(bnet):
         ui.error('Please select the installed Battle.net.exe, not the installer.')
         return False
-    compat = ui.choose_directory('Select the Proton prefix / compatdata directory (the directory containing pfx)')
+    ui.info('Step 2 of 4 — Select the prefix directory.\n\nChoose the folder that directly contains a pfx/ subfolder. Select the prefix itself, NOT pfx/ and NOT drive_c/. For a Heroic prefix, this is the folder named for the prefix, for example: ~/Games/Heroic/Prefixes/World of Warcraft/.')
+    compat = ui.choose_directory('Select the prefix folder containing pfx/')
     if not compat:
         return False
     compat = os.path.abspath(os.path.expanduser(compat))
     if not os.path.isdir(os.path.join(compat, 'pfx')):
         ui.error('The selected prefix must contain a pfx/ directory. Select the compatdata directory, not pfx itself.')
         return False
-    wow = ui.choose_directory('Select the existing World of Warcraft directory (containing _retail_ or _classic_)')
+    ui.info('Step 3 of 4 — Select the World of Warcraft install root.\n\nChoose the parent folder containing the version folders such as _retail_, _classic_, _classic_era_, or _classic_beta_. Do NOT select one of those version folders, and do NOT select Wow.exe/WowB.exe itself.\n\nFor WoW Forever Beta, choose the World of Warcraft folder containing _classic_beta_/WowB.exe.')
+    wow = ui.choose_directory('Select WoW install root (the folder containing _classic_beta_, _retail_, etc.)')
     if not wow:
         return False
     wow = os.path.abspath(os.path.expanduser(wow))
@@ -60,6 +63,7 @@ def register(root: str, steam_edit: bool = True, log=print) -> bool:
     if not tools:
         ui.error('No installed Proton version was found. Install Proton or GE-Proton through Steam first.')
         return False
+    ui.info('Step 4 of 4 — Choose the Proton version for this Battle.net prefix.\n\nSelect the Proton version you want Steam to use for Battle.net and WoW. GE-Proton appears here if it is installed in Steam compatibility tools. The selected prefix is kept; WoW Deck will not reinstall the game.')
     current = load_config().get('proton')
     tool = select_proton(root, current)
     if not tool:
