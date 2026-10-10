@@ -151,13 +151,15 @@ def _paddles_install(ctx: Ctx) -> None:
         need = files.WRAPPER not in sc.launch_options or (STEAM_INPUT_OFF and steam.get_steam_input(sc) != '0')
         if not need:
             ctx.log(f'  ok      Steam shortcut "{sc.name}" already configured'); continue
+        prefix = (f'STEAM_COMPAT_DATA_PATH="{ctx.existing_compat_data}" ' if ctx.existing_compat_data else '')
+        launch_options = prefix + files.LAUNCH_OPTIONS
         if ctx.ensure_steam_closed():
-            steam.set_launch_options(sc, files.LAUNCH_OPTIONS); sc.launch_options = files.LAUNCH_OPTIONS   # keep ctx current for detect()
+            steam.set_launch_options(sc, launch_options); sc.launch_options = launch_options   # keep ctx current for detect()
             if STEAM_INPUT_OFF:
                 steam.set_steam_input(sc, '0')
             ctx.log(f'  configured Steam shortcut "{sc.name}" (launch options' + (', Steam Input off)' if STEAM_INPUT_OFF else '; Steam Input left enabled)'))
         else:
-            ctx.log(f'  MANUAL  "{sc.name}": launch options -> {files.LAUNCH_OPTIONS}' + ('; Controller -> Disable Steam Input' if STEAM_INPUT_OFF else ''))
+            ctx.log(f'  MANUAL  "{sc.name}": launch options -> {launch_options}' + ('; Controller -> Disable Steam Input' if STEAM_INPUT_OFF else ''))
     _ensure_steam_ignores_edge(ctx)
 
 
