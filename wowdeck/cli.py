@@ -62,7 +62,9 @@ def doctor(args) -> int:
         bad = tver in deck.PROTON_BAD
         _p(FAIL if bad else (OK if tool else WARN), f'  Proton: {tool or "(default)"}' + (f' = {tver}' if tver else '') + (' (broken hidraw env in this build; pick 10.0-3+ or Experimental)' if bad else ''))
         blockers += bad
-    wtfs = deck.wow_wtf_dirs(root)
+    # Include explicitly imported installs outside Steam's default compatdata tree.
+    ctx_for_wow = components.make_ctx()
+    wtfs = ctx_for_wow.wtf_dirs if ctx_for_wow else deck.wow_wtf_dirs(root)
     _p(OK if wtfs else WARN, f'WoW installs: {len(wtfs)}')
     for d in wtfs:
         _p(OK if os.path.isfile(os.path.join(d, files.WOW_JSON)) else WARN, f'  {files.WOW_JSON} in {d.split("compatdata/")[-1]}')
